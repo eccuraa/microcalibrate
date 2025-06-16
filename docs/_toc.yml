@@ -1,2 +1,4 @@
 format: jb-book
-root: index
+root: intro
+chapters:
+- file: calibration.ipynb
