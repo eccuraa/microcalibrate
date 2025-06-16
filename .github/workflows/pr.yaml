@@ -39,6 +39,5 @@ jobs:
       - name: Install
         run: |
           uv pip install -e "." --system
-      - name: Install R and dependencies
       - name: Run tests with coverage
         run: make test
