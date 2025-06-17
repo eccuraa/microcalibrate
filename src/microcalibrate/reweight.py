@@ -1,6 +1,12 @@
+import logging
+from typing import Optional
+
 import numpy as np
+import pandas as pd
 import torch
 from tqdm import tqdm
+
+logger = logging.getLogger(__name__)
 
 # Add device variable to use gpu (incl mps) if available
 device = torch.device(
@@ -11,16 +17,41 @@ device = torch.device(
 
 
 def reweight(
-    original_weights,
-    loss_matrix,
-    targets_array,
-    dropout_rate=0.1,
-    epochs=2_000,
-    noise_level=10.0,
-    subsample_every=50,
-    learning_rate=1e-3,
-):
+    original_weights: np.ndarray,
+    loss_matrix: pd.DataFrame,
+    targets_array: np.ndarray,
+    dropout_rate: Optional[float] = 0.1,
+    epochs: Optional[int] = 2_000,
+    noise_level: Optional[float] = 10.0,
+    subsample_every: Optional[int] = 50,
+    learning_rate: Optional[float] = 1e-3,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Reweight the original weights based on the loss matrix and targets.
+
+    Args:
+        original_weights (np.ndarray): Original weights to be reweighted.
+        loss_matrix (pd.DataFrame): DataFrame containing the loss matrix.
+        targets_array (np.ndarray): Array of target values.
+        dropout_rate (float): Optional probability of dropping weights during training.
+        epochs (int): Optional number of epochs for training.
+        noise_level (float): Optional level of noise to add to the original weights.
+        subsample_every (int): Optional frequency of subsampling during training.
+        learning_rate (float): Optional learning rate for the optimizer.
+
+    Returns:
+        np.ndarray: Reweighted weights.
+        np.ndarray: Indices of the original weights that were kept after subsampling.
+    """
     target_names = np.array(loss_matrix.columns)
+
+    logger.info(
+        f"Starting calibration process for targets {target_names}: {targets_array}"
+    )
+    logger.info(
+        f"Original weights - mean: {original_weights.mean():.4f}, "
+        f"std: {original_weights.std():.4f}"
+    )
+
     loss_matrix = torch.tensor(
         loss_matrix.values, dtype=torch.float32, device=device
     )
@@ -37,14 +68,39 @@ def reweight(
         device=device,
     )
 
-    def loss(weights):
+    logger.info(
+        f"Initial weights after noise - mean: {torch.exp(weights).mean().item():.4f}, "
+        f"std: {torch.exp(weights).std():.4f}"
+    )
+
+    def loss(weights: torch.Tensor) -> torch.Tensor:
+        """Calculate the loss based on the current weights and targets.
+
+        Args:
+            weights (torch.Tensor): Current weights in log space.
+
+        Returns:
+            torch.Tensor: Mean squared relative error between estimated and target values.
+        """
         estimate = weights @ loss_matrix
         rel_error = (
             ((estimate - targets_array) + 1) / (targets_array + 1)
         ) ** 2
+        logger.info(f"Estimates: {estimate}")
+        logger.info(f"Targets: {targets_array}")
+        logger.info(f"Relative error: {rel_error}")
         return rel_error.mean()
 
-    def dropout_weights(weights, p):
+    def dropout_weights(weights: torch.Tensor, p: float) -> torch.Tensor:
+        """Apply dropout to the weights.
+
+        Args:
+            weights (torch.Tensor): Current weights in log space.
+            p (float): Probability of dropping weights.
+
+        Returns:
+            torch.Tensor: Weights after applying dropout.
+        """
         if p == 0:
             return weights
         total_weight = weights.sum()
@@ -58,7 +114,36 @@ def reweight(
 
     iterator = tqdm(range(epochs), desc="Reweighting progress", unit="epoch")
 
+    loss_over_epochs = []
+    l = None
     for i in iterator:
+        if i % 10 == 0:
+            logger.info(
+                f"Initial weights after noise - mean: {torch.exp(weights).mean().item():.4f}, "
+                f"std: {torch.exp(weights).std():.4f}"
+            )
+            if l == None:
+                l = loss(torch.exp(weights))
+                logger.info(torch.exp(weights))
+            loss_over_epochs.append(l.item())
+            iterator.set_postfix(
+                {
+                    "loss": l.item(),
+                    "count_observations": loss_matrix.shape[0],
+                    "weights_mean": torch.exp(weights).mean().item(),
+                    "weights_std": torch.exp(weights).std().item(),
+                    "weights_min": torch.exp(weights).min().item(),
+                }
+            )
+
+            if len(loss_over_epochs) > 1:
+                loss_change = loss_over_epochs[-2] - l.item()
+                logger.info(
+                    f"Epoch {i:4d}: Loss = {l.item():.6f}, "
+                    f"Change = {loss_change:.6f} "
+                    f"({'improving' if loss_change > 0 else 'worsening'})"
+                )
+
         optimizer.zero_grad()
         running_loss = None
         for j in range(2):
@@ -69,17 +154,6 @@ def reweight(
             else:
                 running_loss += l
         l = running_loss / 2
-
-        if i % 10 == 0:
-            iterator.set_postfix(
-                {
-                    "loss": l.item(),
-                    "count_observations": loss_matrix.shape[0],
-                    "weights_mean": torch.exp(weights).mean().item(),
-                    "weights_std": torch.exp(weights).std().item(),
-                    "weights_min": torch.exp(weights).min().item(),
-                }
-            )
 
         l.backward()
         optimizer.step()
@@ -93,6 +167,11 @@ def reweight(
             loss_matrix = loss_matrix[indices, :]
             weights = weights[indices]
 
+            logger.info(
+                f"Epoch {i}: Subsampling - kept {len(indices)} observations, "
+                f"removed {original_indices - len(indices)} (weights < {k})"
+            )
+
             loss_matrix = torch.tensor(
                 loss_matrix.detach().cpu(), dtype=torch.float32, device=device
             )
@@ -105,5 +184,7 @@ def reweight(
 
             original_indices = original_indices[indices]
             optimizer = torch.optim.Adam([weights], lr=learning_rate)
+
+    logger.info(f"Reweighting completed. Final sample size: {len(weights)}")
 
     return torch.exp(weights).detach().cpu().numpy(), original_indices
