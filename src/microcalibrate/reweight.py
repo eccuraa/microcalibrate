@@ -88,6 +88,23 @@ def reweight(
         ) ** 2
         return rel_error.mean()
 
+    def pct_close(
+        weights: torch.Tensor,
+        t: Optional[float] = 0.1,
+    ) -> float:
+        """Calculate the percentage of estimates close to targets.
+
+        Args:
+            weights (torch.Tensor): Current weights in log space.
+            t (float): Threshold for closeness.
+
+        Returns:
+            float: Percentage of estimates within the threshold.
+        """
+        estimate = weights @ loss_matrix
+        abs_error = torch.abs((estimate - targets_array) / (1 + targets_array))
+        return (abs_error < t).sum() / abs_error.numel()
+
     def dropout_weights(weights: torch.Tensor, p: float) -> torch.Tensor:
         """Apply dropout to the weights.
 
@@ -117,6 +134,7 @@ def reweight(
         if i % 10 == 0:
             if l == None:
                 l = loss(torch.exp(weights))
+                close = pct_close(torch.exp(weights))
             loss_over_epochs.append(l.item())
             iterator.set_postfix(
                 {
@@ -127,6 +145,8 @@ def reweight(
                     "weights_min": torch.exp(weights).min().item(),
                 }
             )
+
+            logger.info(f"Within 10% from targets: {close:.2%} \n")
 
             if len(loss_over_epochs) > 1:
                 loss_change = loss_over_epochs[-2] - l.item()
@@ -141,6 +161,7 @@ def reweight(
         for j in range(2):
             weights_ = dropout_weights(weights, dropout_rate)
             l = loss(torch.exp(weights_))
+            close = pct_close(torch.exp(weights_))
             if running_loss is None:
                 running_loss = l
             else:

@@ -4,5 +4,3 @@
 def test_import() -> None:
     """Test that the package can be imported."""
     import microcalibrate
-
-    assert microcalibrate is not None

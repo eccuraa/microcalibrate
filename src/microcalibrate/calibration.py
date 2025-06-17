@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class Calibration:
     def __init__(
         self,
-        data: pd.DataFrame,
+        loss_matrix: pd.DataFrame,
         weights: np.ndarray,
         targets: np.ndarray,
         epochs: Optional[int] = 32,
@@ -22,7 +22,7 @@ class Calibration:
         """Initialize the Calibration class.
 
         Args:
-            data (pd.DataFrame): DataFrame containing the loss matrix.
+            loss_matrix (pd.DataFrame): DataFrame containing the loss matrix.
             weights (np.ndarray): Array of original weights.
             targets (np.ndarray): Array of target values.
             epochs (int): Optional number of epochs for calibration. Defaults to 32.
@@ -32,7 +32,7 @@ class Calibration:
             subsample_every (int): Optional frequency of subsampling during training. Defaults to 50.
         """
 
-        self.data = data
+        self.loss_matrix = loss_matrix
         self.weights = weights
         self.targets = targets
         self.epochs = epochs
@@ -48,7 +48,7 @@ class Calibration:
 
         new_weights, subsample = reweight(
             original_weights=self.weights,
-            loss_matrix=self.data,
+            loss_matrix=self.loss_matrix,
             targets_array=self.targets,
             epochs=self.epochs,
             noise_level=self.noise_level,
@@ -57,5 +57,5 @@ class Calibration:
             subsample_every=self.subsample_every,
         )
 
-        self.data = self.data.loc[subsample]
+        self.loss_matrix = self.loss_matrix.loc[subsample]
         self.weights = new_weights

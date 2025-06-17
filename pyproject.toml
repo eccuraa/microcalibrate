@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "Calibrating microdata"
 readme = "README.md"
 authors = [
-    { name = "Nikhil Woodruff", email = "nikhil.woodruff@outlook.com" }
+    { name = "Nikhil Woodruff", email = "nikhil.woodruff@outlook.com" },
+    { name = "María Juaristi", email = "juaristi@uni.minerva.edu" }
 ]
 requires-python = ">=3.11"
 dependencies = [

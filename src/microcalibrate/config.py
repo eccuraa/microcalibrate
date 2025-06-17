@@ -18,15 +18,9 @@ VALIDATE_CONFIG = ConfigDict(arbitrary_types_allowed=True)
 DEFAULT_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-# Define logging levels for different environments
-DEBUG_LEVEL = logging.DEBUG
-INFO_LEVEL = logging.INFO
-WARN_LEVEL = logging.WARNING
-ERROR_LEVEL = logging.ERROR
-
 
 def configure_logging(
-    level: int = INFO_LEVEL,
+    level: int = logging.ERROR,
     log_format: str = DEFAULT_LOG_FORMAT,
     date_format: str = DEFAULT_DATE_FORMAT,
     log_file: Optional[str] = None,

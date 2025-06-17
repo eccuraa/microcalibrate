@@ -1,24 +1,19 @@
-# MicroCalibrate Tests
+# MicroCalibrate tests
 
 This directory contains tests for the MicroCalibrate package.
 
-## Test Structure
+## Test structure
 
 The test suite is organized as follows:
 
 - **test_basic.py**: Basic functionality tests for the package
+- **test_calibration.py**: Simple tests for the Calibration class on synthetic data
 - Coming soon...
 
-## Running Tests
+## Running tests
 
 To run the tests, use the following command from the project root:
 
 ```bash
-python -m pytest tests/
-```
-
-For more verbose output:
-
-```bash
-python -m pytest tests/ -v
+make test
 ```

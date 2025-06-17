@@ -39,7 +39,7 @@ def test_calibration_basic() -> None:
     )
 
     calibrator = Calibration(
-        data=targets_matrix,
+        loss_matrix=targets_matrix,
         weights=weights,
         targets=targets,
         noise_level=0.05,
@@ -52,11 +52,13 @@ def test_calibration_basic() -> None:
     # Call calibrate method on our data and targets of interest
     calibrator.calibrate()
 
-    final_weights = targets_matrix.mul(calibrator.weights, axis=0).sum().values
+    final_estimates = (
+        targets_matrix.mul(calibrator.weights, axis=0).sum().values
+    )
 
     # Check that the calibration process has improved the weights
     np.testing.assert_allclose(
-        final_weights,
+        final_estimates,
         targets,
         rtol=0.01,  # relative tolerance
         err_msg="Calibrated totals do not match target values",
@@ -95,7 +97,7 @@ def test_calibration_harder_targets() -> None:
     )
 
     calibrator = Calibration(
-        data=targets_matrix,
+        loss_matrix=targets_matrix,
         weights=weights,
         targets=targets,
         noise_level=0.05,
@@ -108,11 +110,13 @@ def test_calibration_harder_targets() -> None:
     # Call calibrate method on our data and targets of interest
     calibrator.calibrate()
 
-    final_weights = targets_matrix.mul(calibrator.weights, axis=0).sum().values
+    final_estimates = (
+        targets_matrix.mul(calibrator.weights, axis=0).sum().values
+    )
 
     # Check that the calibration process has improved the weights
     np.testing.assert_allclose(
-        final_weights,
+        final_estimates,
         targets,
         rtol=0.01,  # relative tolerance
         err_msg="Calibrated totals do not match target values",

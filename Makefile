@@ -1,7 +1,7 @@
 
 
 test:
-	pytest tests/ --cov=microcalibrate --cov-report=xml --maxfail=0
+	pytest tests/ --cov=microcalibrate --cov-report=xml --maxfail=0 -v
 
 install:
 	pip install -e ".[dev]"
