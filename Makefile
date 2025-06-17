@@ -1,10 +1,29 @@
 
 
 test:
-	echo "No tests added"
+	pytest tests/ --cov=microcalibrate --cov-report=xml --maxfail=0 -v
 
 install:
 	pip install -e ".[dev]"
 
+check-format:
+	linecheck .
+	isort --check-only --profile black src/
+	black . -l 79 --check
+
 format:
+	linecheck . --fix
+	isort --profile black src/
 	black . -l 79
+
+documentation:
+	cd docs && jupyter-book build .
+	python docs/add_plotly_to_book.py docs/_build/html
+
+build:
+	pip install build
+	python -m build
+
+clean:
+	rm -rf dist/ build/ *.egg-info/
+	rm -rf docs/_build/
