@@ -7,14 +7,15 @@ import numpy as np
 import pandas as pd
 
 
-def test_calibration() -> None:
-    """Test the calibration process."""
+def test_calibration_basic() -> None:
+    """Test the calibration process with a basic setup where the weights are already correctly calibrated to fit the targets."""
 
     # Create a mock dataset with age and income
+    random_generator = np.random.default_rng(0)
     data = pd.DataFrame(
         {
-            "age": np.random.randint(18, 70, size=100),
-            "income": np.random.normal(40000, 50000, size=100),
+            "age": random_generator.integers(18, 70, size=100),
+            "income": random_generator.normal(40000, 50000, size=100),
         }
     )
     weights = np.ones(len(data))
@@ -38,13 +39,75 @@ def test_calibration() -> None:
     )
 
     calibrator = Calibration(
-        data=data,
+        data=targets_matrix,
         weights=weights,
         targets=targets,
+        noise_level=0.05,
+        epochs=528,
+        learning_rate=0.01,
+        dropout_rate=0,
+        subsample_every=0,
     )
 
     # Call calibrate method on our data and targets of interest
-    # calibrator.calibrate()
+    calibrator.calibrate()
+
+    final_weights = targets_matrix.mul(calibrator.weights, axis=0).sum().values
+
+    # Check that the calibration process has improved the weights
+    np.testing.assert_allclose(
+        final_weights,
+        targets,
+        rtol=0.01,  # relative tolerance
+        err_msg="Calibrated totals do not match target values",
+    )
+
+
+def test_calibration_harder_targets() -> None:
+    """Test the calibration process with targets that are 15% higher than the sum of the orginal weights."""
+
+    # Create a mock dataset with age and income
+    random_generator = np.random.default_rng(0)
+    data = pd.DataFrame(
+        {
+            "age": random_generator.integers(18, 70, size=100),
+            "income": random_generator.normal(40000, 50000, size=100),
+        }
+    )
+    weights = np.ones(len(data))
+    targets_matrix = pd.DataFrame(
+        {
+            "income_aged_20_30": (
+                (data["age"] >= 20) & (data["age"] <= 30)
+            ).astype(float)
+            * data["income"],
+            "income_aged_40_50": (
+                (data["age"] >= 40) & (data["age"] <= 50)
+            ).astype(float)
+            * data["income"],
+        }
+    )
+    targets = np.array(
+        [
+            (targets_matrix["income_aged_20_30"] * weights).sum() * 1.15,
+            (targets_matrix["income_aged_40_50"] * weights).sum() * 1.15,
+        ]
+    )
+
+    calibrator = Calibration(
+        data=targets_matrix,
+        weights=weights,
+        targets=targets,
+        noise_level=0.05,
+        epochs=528,
+        learning_rate=0.01,
+        dropout_rate=0,
+        subsample_every=0,
+    )
+
+    # Call calibrate method on our data and targets of interest
+    calibrator.calibrate()
+
     final_weights = targets_matrix.mul(calibrator.weights, axis=0).sum().values
 
     # Check that the calibration process has improved the weights

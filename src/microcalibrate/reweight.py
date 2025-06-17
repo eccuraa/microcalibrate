@@ -86,9 +86,6 @@ def reweight(
         rel_error = (
             ((estimate - targets_array) + 1) / (targets_array + 1)
         ) ** 2
-        logger.info(f"Estimates: {estimate}")
-        logger.info(f"Targets: {targets_array}")
-        logger.info(f"Relative error: {rel_error}")
         return rel_error.mean()
 
     def dropout_weights(weights: torch.Tensor, p: float) -> torch.Tensor:
@@ -118,13 +115,8 @@ def reweight(
     l = None
     for i in iterator:
         if i % 10 == 0:
-            logger.info(
-                f"Initial weights after noise - mean: {torch.exp(weights).mean().item():.4f}, "
-                f"std: {torch.exp(weights).std():.4f}"
-            )
             if l == None:
                 l = loss(torch.exp(weights))
-                logger.info(torch.exp(weights))
             loss_over_epochs.append(l.item())
             iterator.set_postfix(
                 {
