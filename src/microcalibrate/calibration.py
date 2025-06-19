@@ -107,21 +107,21 @@ class Calibration:
                 "Some targets are negative. This may not make sense for totals."
             )
 
-        # Estimate order of magnitude from weighted column sums and warn if they are off by an order of magnitude from targets
-        weighted_estimates = weights @ loss_matrix.values
+        # Estimate order of magnitude from column sums and warn if they are off by an order of magnitude from targets
+        estimates = (
+            np.ones((1, loss_matrix.shape[0])) @ loss_matrix.values
+        ).flatten()
         # Use a small epsilon to avoid division by zero
         eps = 1e-4
-        adjusted_estimates = np.where(
-            weighted_estimates == 0, eps, weighted_estimates
-        )
+        adjusted_estimates = np.where(estimates == 0, eps, estimates)
         ratios = targets / adjusted_estimates
 
         for i, (target_val, estimate_val, ratio) in enumerate(
-            zip(targets, weighted_estimates, ratios)
+            zip(targets, estimates, ratios)
         ):
             if estimate_val == 0:
                 logger.warning(
-                    f"Column {target_names[i]} has a zero weighted estimate; using ε={eps} for comparison."
+                    f"Column {target_names[i]} has a zero estimate sum; using ε={eps} for comparison."
                 )
 
             order_diff = np.log10(abs(ratio)) if ratio != 0 else np.inf
@@ -129,4 +129,12 @@ class Calibration:
                 logger.warning(
                     f"Target {target_names[i]} ({target_val:.2e}) differs from initial estimate ({estimate_val:.2e}) "
                     f"by {order_diff:.2f} orders of magnitude."
+                )
+
+            contributing_mask = loss_matrix.iloc[:, i] != 0
+            contribution_ratio = contributing_mask.sum() / loss_matrix.shape[0]
+            if contribution_ratio < 0.01:
+                logger.warning(
+                    f"Target {target_names[i]} is supported by only {contribution_ratio:.2%} "
+                    f"of records in the loss matrix. This may make calibration unstable or ineffective."
                 )
