@@ -72,6 +72,8 @@ class Calibration:
         self.loss_matrix = self.loss_matrix.loc[subsample]
         self.weights = new_weights
 
+        return performance_df
+
     def _assess_targets(
         self,
         loss_matrix: pd.DataFrame,
