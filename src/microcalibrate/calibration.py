@@ -49,7 +49,7 @@ class Calibration:
 
         from .reweight import reweight
 
-        new_weights, subsample = reweight(
+        new_weights, subsample, performance_df = reweight(
             original_weights=self.weights,
             loss_matrix=self.loss_matrix,
             targets_array=self.targets,
@@ -63,3 +63,5 @@ class Calibration:
 
         self.loss_matrix = self.loss_matrix.loc[subsample]
         self.weights = new_weights
+
+        return performance_df

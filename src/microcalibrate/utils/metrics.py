@@ -38,4 +38,4 @@ def pct_close(
         float: Percentage of estimates within the threshold.
     """
     abs_error = torch.abs((estimate - targets_array) / (1 + targets_array))
-    return (abs_error < t).sum() / abs_error.numel()
+    return ((abs_error < t).sum() / abs_error.numel()).item()

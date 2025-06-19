@@ -44,7 +44,8 @@ def reweight(
 
     Returns:
         np.ndarray: Reweighted weights.
-        np.ndarray: Indices of the original weights that were kept after subsampling.
+        original_indices (np.ndarray): Indices of the original weights that were kept after subsampling.
+        performance_df (pd.DataFrame): DataFrame containing the performance metrics over epochs.
     """
     target_names = np.array(loss_matrix.columns)
 
@@ -191,4 +192,8 @@ def reweight(
 
     logger.info(f"Reweighting completed. Final sample size: {len(weights)}")
 
-    return torch.exp(weights).detach().cpu().numpy(), original_indices
+    return (
+        torch.exp(weights).detach().cpu().numpy(),
+        original_indices,
+        performance_df,
+    )

@@ -50,7 +50,7 @@ def test_calibration_basic() -> None:
     )
 
     # Call calibrate method on our data and targets of interest
-    calibrator.calibrate()
+    performance_df = calibrator.calibrate()
 
     final_estimates = (
         targets_matrix.mul(calibrator.weights, axis=0).sum().values
@@ -109,7 +109,7 @@ def test_calibration_harder_targets() -> None:
     )
 
     # Call calibrate method on our data and targets of interest
-    calibrator.calibrate()
+    performance_df = calibrator.calibrate()
 
     final_estimates = (
         targets_matrix.mul(calibrator.weights, axis=0).sum().values
