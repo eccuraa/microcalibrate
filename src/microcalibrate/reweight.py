@@ -6,6 +6,9 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
+from .utils.log_performance import log_performance_over_epochs
+from .utils.metrics import loss, pct_close
+
 logger = logging.getLogger(__name__)
 
 # Add device variable to use gpu (incl mps) if available
@@ -25,6 +28,7 @@ def reweight(
     noise_level: Optional[float] = 10.0,
     subsample_every: Optional[int] = 50,
     learning_rate: Optional[float] = 1e-3,
+    csv_path: Optional[str] = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Reweight the original weights based on the loss matrix and targets.
 
@@ -57,9 +61,7 @@ def reweight(
     )
     original_indices = np.arange(loss_matrix.shape[0])
 
-    targets_array = torch.tensor(
-        targets_array, dtype=torch.float32, device=device
-    )
+    targets = torch.tensor(targets_array, dtype=torch.float32, device=device)
     random_noise = np.random.random(original_weights.shape) * noise_level
     weights = torch.tensor(
         np.log(original_weights + random_noise),
@@ -72,38 +74,6 @@ def reweight(
         f"Initial weights after noise - mean: {torch.exp(weights).mean().item():.4f}, "
         f"std: {torch.exp(weights).std():.4f}"
     )
-
-    def loss(weights: torch.Tensor) -> torch.Tensor:
-        """Calculate the loss based on the current weights and targets.
-
-        Args:
-            weights (torch.Tensor): Current weights in log space.
-
-        Returns:
-            torch.Tensor: Mean squared relative error between estimated and target values.
-        """
-        estimate = weights @ loss_matrix
-        rel_error = (
-            ((estimate - targets_array) + 1) / (targets_array + 1)
-        ) ** 2
-        return rel_error.mean()
-
-    def pct_close(
-        weights: torch.Tensor,
-        t: Optional[float] = 0.1,
-    ) -> float:
-        """Calculate the percentage of estimates close to targets.
-
-        Args:
-            weights (torch.Tensor): Current weights in log space.
-            t (float): Threshold for closeness.
-
-        Returns:
-            float: Percentage of estimates within the threshold.
-        """
-        estimate = weights @ loss_matrix
-        abs_error = torch.abs((estimate - targets_array) / (1 + targets_array))
-        return (abs_error < t).sum() / abs_error.numel()
 
     def dropout_weights(weights: torch.Tensor, p: float) -> torch.Tensor:
         """Apply dropout to the weights.
@@ -129,13 +99,32 @@ def reweight(
     iterator = tqdm(range(epochs), desc="Reweighting progress", unit="epoch")
 
     loss_over_epochs = []
-    l = None
+    estimates_over_epochs = []
+    pct_close_over_epochs = []
+    epochs = []
+
+    tracking_n = 10  # Track every 10th epoch
     for i in iterator:
-        if i % 10 == 0:
-            if l == None:
-                l = loss(torch.exp(weights))
-                close = pct_close(torch.exp(weights))
+        optimizer.zero_grad()
+        running_loss = None
+        for j in range(2):
+            weights_ = dropout_weights(weights, dropout_rate)
+            estimate = torch.exp(weights_) @ loss_matrix
+            l = loss(estimate, targets)
+            close = pct_close(estimate, targets)
+            if running_loss is None:
+                running_loss = l
+            else:
+                running_loss += l
+
+        l = running_loss / 2
+
+        if i % tracking_n == 0:
+            epochs.append(i)
             loss_over_epochs.append(l.item())
+            pct_close_over_epochs.append(close)
+            estimates_over_epochs.append(estimate.detach().cpu().numpy())
+
             iterator.set_postfix(
                 {
                     "loss": l.item(),
@@ -155,18 +144,6 @@ def reweight(
                     f"Change = {loss_change:.6f} "
                     f"({'improving' if loss_change > 0 else 'worsening'})"
                 )
-
-        optimizer.zero_grad()
-        running_loss = None
-        for j in range(2):
-            weights_ = dropout_weights(weights, dropout_rate)
-            l = loss(torch.exp(weights_))
-            close = pct_close(torch.exp(weights_))
-            if running_loss is None:
-                running_loss = l
-            else:
-                running_loss += l
-        l = running_loss / 2
 
         l.backward()
         optimizer.step()
@@ -197,6 +174,20 @@ def reweight(
 
             original_indices = original_indices[indices]
             optimizer = torch.optim.Adam([weights], lr=learning_rate)
+
+    tracker_dict = {
+        "epochs": epochs,
+        "loss": loss_over_epochs,
+        "pct_close": pct_close_over_epochs,
+        "estimates": estimates_over_epochs,
+    }
+
+    performance_df = log_performance_over_epochs(
+        tracker_dict, targets, target_names
+    )
+
+    if csv_path:
+        performance_df.to_csv(csv_path, index=True)
 
     logger.info(f"Reweighting completed. Final sample size: {len(weights)}")
 

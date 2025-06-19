@@ -18,6 +18,7 @@ class Calibration:
         learning_rate: Optional[float] = 1e-3,
         dropout_rate: Optional[float] = 0.1,
         subsample_every: Optional[int] = 50,
+        csv_path: Optional[str] = None,
     ):
         """Initialize the Calibration class.
 
@@ -30,6 +31,7 @@ class Calibration:
             learning_rate (float): Optional learning rate for the optimizer. Defaults to 1e-3.
             dropout_rate (float): Optional probability of dropping weights during training. Defaults to 0.1.
             subsample_every (int): Optional frequency of subsampling during training. Defaults to 50.
+            csv_path (str): Optional path to save performance logs as CSV. Defaults to None.
         """
 
         self.loss_matrix = loss_matrix
@@ -40,6 +42,7 @@ class Calibration:
         self.learning_rate = learning_rate
         self.dropout_rate = dropout_rate
         self.subsample_every = subsample_every
+        self.csv_path = csv_path
 
     def calibrate(self) -> None:
         """Calibrate the weights based on the loss matrix and targets."""
@@ -55,6 +58,7 @@ class Calibration:
             learning_rate=self.learning_rate,
             dropout_rate=self.dropout_rate,
             subsample_every=self.subsample_every,
+            csv_path=self.csv_path,
         )
 
         self.loss_matrix = self.loss_matrix.loc[subsample]
