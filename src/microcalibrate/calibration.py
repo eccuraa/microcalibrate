@@ -46,6 +46,14 @@ class Calibration:
 
     def calibrate(self) -> None:
         """Calibrate the weights based on the loss matrix and targets."""
+        target_names = np.array(self.loss_matrix.columns)
+
+        self._assess_targets(
+            loss_matrix=self.loss_matrix,
+            weights=self.weights,
+            targets=self.targets,
+            target_names=target_names,
+        )
 
         from .reweight import reweight
 
@@ -64,4 +72,61 @@ class Calibration:
         self.loss_matrix = self.loss_matrix.loc[subsample]
         self.weights = new_weights
 
-        return performance_df
+    def _assess_targets(
+        self,
+        loss_matrix: pd.DataFrame,
+        weights: np.ndarray,
+        targets: np.ndarray,
+        target_names: Optional[np.ndarray] = None,
+    ) -> None:
+        """Assess the targets to ensure they do not violate basic requirements like compatibility, correct order of magnitude, etc.
+
+        Args:
+            loss_matrix (pd.DataFrame): DataFrame containing the loss matrix.
+            weights (np.ndarray): Array of original weights.
+            targets (np.ndarray): Array of target values.
+            target_names (np.ndarray): Optional names of the targets for logging. Defaults to None.
+
+        Raises:
+            ValueError: If the targets do not match the expected format or values.
+            ValueError: If the targets are not compatible with each other.
+        """
+        logger.info("Performing basic target assessment...")
+
+        if targets.ndim != 1:
+            raise ValueError("Targets must be a 1D NumPy array.")
+        if len(targets) != loss_matrix.shape[1]:
+            raise ValueError(
+                f"Mismatch: {len(targets)} targets given, but loss_matrix has {loss_matrix.shape[1]} columns."
+            )
+        if np.any(np.isnan(targets)):
+            raise ValueError("Targets contain NaN values.")
+
+        if np.any(targets < 0):
+            logger.warning(
+                "Some targets are negative. This may not make sense for totals."
+            )
+
+        # Estimate order of magnitude from weighted column sums and warn if they are off by an order of magnitude from targets
+        weighted_estimates = weights @ loss_matrix.values
+        # Use a small epsilon to avoid division by zero
+        eps = 1e-4
+        adjusted_estimates = np.where(
+            weighted_estimates == 0, eps, weighted_estimates
+        )
+        ratios = targets / adjusted_estimates
+
+        for i, (target_val, estimate_val, ratio) in enumerate(
+            zip(targets, weighted_estimates, ratios)
+        ):
+            if estimate_val == 0:
+                logger.warning(
+                    f"Column {target_names[i]} has a zero weighted estimate; using ε={eps} for comparison."
+                )
+
+            order_diff = np.log10(abs(ratio)) if ratio != 0 else np.inf
+            if order_diff > 1:
+                logger.warning(
+                    f"Target {target_names[i]} ({target_val:.2e}) differs from initial estimate ({estimate_val:.2e}) "
+                    f"by {order_diff:.2f} orders of magnitude."
+                )

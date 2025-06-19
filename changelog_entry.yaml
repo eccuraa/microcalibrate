@@ -1,4 +1,4 @@
 - bump: minor
   changes:
-    changed:
-    - Added logging capababilities to assess perfomance across epochs.
+    added:
+    - Basic Calibration input checks.
