@@ -21,60 +21,49 @@ def log_performance_over_epochs(
     Returns:
         performance_df: DataFrame containing the calculated errors and performance metrics.
     """
-    targets = targets.detach().cpu().numpy()
+    targets = targets.detach().cpu().numpy().astype(float)  # (k,)
     k = len(targets)
 
-    df = pd.DataFrame(
-        {
-            "epoch": tracked["epochs"],
-            "loss": tracked["loss"],
-            "pct_close": tracked["pct_close"],
+    rows = []
+    for epoch_i, epoch in enumerate(tracked["epochs"]):
+        base = {
+            "epoch": epoch,
+            "loss": tracked["loss"][epoch_i],
+            "pct_close": tracked["pct_close"][epoch_i],
         }
-    )
 
-    # Expand estimates into a matrix (n_epochs, k_targets)
-    estimates = np.stack(tracked["estimates"])
-    estimates_df = pd.DataFrame(
-        estimates, columns=[f"estimate_{i}" for i in range(k)]
-    )
+        # each estimate vector has shape (k,)
+        estimates_vector = np.asarray(
+            tracked["estimates"][epoch_i], dtype=float
+        )
 
-    # Broadcast targets across all rows
-    targets_df = pd.DataFrame(
-        np.tile(targets, (len(df), 1)),
-        columns=(
-            target_names
-            if target_names is not None
-            else [f"target_{i}" for i in range(k)]
-        ),
-    )
+        for t_idx in range(k):
+            target_val = targets[t_idx]
+            est_val = estimates_vector[t_idx]
+            err = est_val - target_val
 
-    # Compute errors
-    errors_df = estimates_df.values - targets_df.values
-    abs_errors_df = np.abs(errors_df)
-    rel_abs_errors_df = abs_errors_df / targets_df.values
+            rows.append(
+                {
+                    **base,
+                    "target_idx": t_idx,
+                    "target_name": (
+                        target_names[t_idx]
+                        if target_names is not None
+                        else None
+                    ),
+                    "target": target_val,
+                    "estimate": est_val,
+                    "error": err,
+                    "abs_error": abs(err),
+                    "rel_abs_error": (
+                        abs(err) / target_val if target_val != 0 else np.nan
+                    ),
+                }
+            )
 
-    # Package into DataFrames with column names
-    errors_df = pd.DataFrame(
-        errors_df, columns=[f"error_{i}" for i in range(k)]
-    )
-    abs_errors_df = pd.DataFrame(
-        abs_errors_df, columns=[f"abs_error_{i}" for i in range(k)]
-    )
-    rel_abs_errors_df = pd.DataFrame(
-        rel_abs_errors_df, columns=[f"rel_abs_error_{i}" for i in range(k)]
-    )
+    df = pd.DataFrame(rows)
 
-    # Concatenate all
-    performance_df = pd.concat(
-        [
-            df.reset_index(drop=True),
-            targets_df,
-            estimates_df,
-            errors_df,
-            abs_errors_df,
-            rel_abs_errors_df,
-        ],
-        axis=1,
-    )
+    if target_names is None:
+        df = df.drop(columns="target_name")
 
-    return performance_df
+    return df
