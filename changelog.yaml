@@ -13,3 +13,8 @@
     added:
     - Basic Calibration input checks.
   date: 2025-06-19 16:34:04
+- bump: minor
+  changes:
+    added:
+    - Logging performance across epochs when calibrating.
+  date: 2025-06-20 11:03:38
