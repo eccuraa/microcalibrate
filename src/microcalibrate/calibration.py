@@ -43,6 +43,7 @@ class Calibration:
         self.dropout_rate = dropout_rate
         self.subsample_every = subsample_every
         self.csv_path = csv_path
+        self.performance_df = None
 
     def calibrate(self) -> None:
         """Calibrate the weights based on the loss matrix and targets."""
@@ -57,7 +58,7 @@ class Calibration:
 
         from .reweight import reweight
 
-        new_weights, subsample, performance_df = reweight(
+        new_weights, subsample, self.performance_df = reweight(
             original_weights=self.weights,
             loss_matrix=self.loss_matrix,
             targets_array=self.targets,
@@ -72,7 +73,7 @@ class Calibration:
         self.loss_matrix = self.loss_matrix.loc[subsample]
         self.weights = new_weights
 
-        return performance_df
+        return self.performance_df
 
     def _assess_targets(
         self,
@@ -140,3 +141,30 @@ class Calibration:
                     f"Target {target_names[i]} is supported by only {contribution_ratio:.2%} "
                     f"of records in the loss matrix. This may make calibration unstable or ineffective."
                 )
+
+    def summary(
+        self,
+    ) -> str:
+        """Generate a summary of the calibration process."""
+        if self.performance_df is None:
+            return "No calibration has been performed yet, make sure to run .calibrate() before requesting a summary."
+
+        last_epoch = self.performance_df["epoch"].max()
+        final_rows = self.performance_df[
+            self.performance_df["epoch"] == last_epoch
+        ]
+
+        df = final_rows[["target_name", "target", "estimate"]].copy()
+        df.rename(
+            columns={
+                "target_name": "Metric",
+                "target": "Official target",
+                "estimate": "Final estimate",
+            },
+            inplace=True,
+        )
+        df["Relative error"] = (
+            df["Final estimate"] - df["Official target"]
+        ) / df["Official target"]
+        df = df.reset_index(drop=True)
+        return df
