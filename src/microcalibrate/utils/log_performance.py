@@ -8,7 +8,7 @@ import torch
 def log_performance_over_epochs(
     tracked: Dict[str, List[Any]],
     targets: torch.Tensor,
-    target_names: Optional[List[str]] = None,
+    target_names: List[str],
 ) -> pd.DataFrame:
     """
     Calculate the errors and performance metrics for the model for all the logged epochs.
@@ -16,7 +16,7 @@ def log_performance_over_epochs(
     Args:
         tracked (Dict[str, List[Any]]): Dictionary containing lists of tracked metrics.
         targets (torch.Tensor): Array of target values.
-        targets_names (torch.Tensor): Array of target names.
+        targets_names (List[str]): Array of target names.
 
     Returns:
         performance_df: DataFrame containing the calculated errors and performance metrics.
@@ -29,7 +29,6 @@ def log_performance_over_epochs(
         base = {
             "epoch": epoch,
             "loss": tracked["loss"][epoch_i],
-            "pct_close": tracked["pct_close"][epoch_i],
         }
 
         # each estimate vector has shape (k,)
@@ -45,7 +44,6 @@ def log_performance_over_epochs(
             rows.append(
                 {
                     **base,
-                    "target_idx": t_idx,
                     "target_name": (
                         target_names[t_idx]
                         if target_names is not None

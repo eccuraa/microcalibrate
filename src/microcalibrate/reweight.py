@@ -182,7 +182,6 @@ def reweight(
     tracker_dict = {
         "epochs": epochs,
         "loss": loss_over_epochs,
-        "pct_close": pct_close_over_epochs,
         "estimates": estimates_over_epochs,
     }
 
