@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+    - Logging performance across epochs when calibrating.
