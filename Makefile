@@ -34,3 +34,18 @@ changelog:
 	bump-version changelog.yaml pyproject.toml
 	rm changelog_entry.yaml || true
 	touch changelog_entry.yaml
+
+dashboard-install:
+	cd calibration-dashboard && npm install
+
+dashboard-dev:
+	cd calibration-dashboard && npm run dev
+
+dashboard-build:
+	cd calibration-dashboard && npm run build
+
+dashboard-start:
+	cd calibration-dashboard && npm start
+
+dashboard-clean:
+	cd calibration-dashboard && rm -rf .next node_modules
