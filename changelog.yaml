@@ -23,3 +23,8 @@
     added:
     - Summary of calibration results.
   date: 2025-06-20 12:55:18
+- bump: minor
+  changes:
+    added:
+    - Test for warning logic in Calibration() input checks.
+  date: 2025-06-23 10:15:54
