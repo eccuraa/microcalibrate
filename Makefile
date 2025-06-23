@@ -36,16 +36,25 @@ changelog:
 	touch changelog_entry.yaml
 
 dashboard-install:
-	cd calibration-dashboard && npm install
+	cd microcalibration-dashboard && npm install
 
 dashboard-dev:
-	cd calibration-dashboard && npm run dev
+	cd microcalibration-dashboard && npm run dev
 
 dashboard-build:
-	cd calibration-dashboard && npm run build
+	cd microcalibration-dashboard && npm run build
 
 dashboard-start:
-	cd calibration-dashboard && npm start
+	cd microcalibration-dashboard && npm start
 
 dashboard-clean:
-	cd calibration-dashboard && rm -rf .next node_modules
+	cd microcalibration-dashboard && rm -rf .next node_modules
+
+dashboard-static:
+	cd microcalibration-dashboard && npm run static
+
+dashboard-preview:
+	cd microcalibration-dashboard && npm run static && npx serve out
+
+dashboard-check:
+	cd microcalibration-dashboard && npm run lint && npm run static && echo "✅ Dashboard ready for GitHub Pages deployment"

@@ -136,7 +136,7 @@ export default function MetricsOverview({ data }: MetricsOverviewProps) {
             <span className="font-semibold text-gray-900">{targetNames.length}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Training epochs:</span>
+            <span className="text-gray-600">Training epochs logged:</span>
             <span className="font-semibold text-gray-900">{allEpochs.length}</span>
           </div>
           <div className="flex justify-between">
@@ -159,7 +159,7 @@ export default function MetricsOverview({ data }: MetricsOverviewProps) {
             <Clock className="h-6 w-6 text-blue-600" />
             <div className="ml-3">
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Duration</p>
-              <p className="text-lg font-bold text-gray-900">{allEpochs.length} epochs</p>
+              <p className="text-lg font-bold text-gray-900">{maxEpoch} epochs</p>
             </div>
           </div>
         </div>

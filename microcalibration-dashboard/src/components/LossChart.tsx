@@ -130,16 +130,16 @@ export default function LossChart({ data }: LossChartProps) {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis 
               dataKey="epoch" 
-              label={{ value: 'Epoch', position: 'insideBottom', offset: -10 }}
-              tick={{ fontSize: 12 }}
+              label={{ value: 'Epoch', position: 'insideBottom', offset: -10, fontSize: 12 }}
+              tick={{ fontSize: 10 }}
             />
             <YAxis
             domain={yAxisDomain}
             tickFormatter={formatValue}
             tickCount={6}
-            tickMargin={12}
-            label={{ value: 'Value', angle: -90, position: 'insideLeft', textAnchor: 'middle', dx: -19 }}
-            tick={{ fontSize: 12 }}
+            tickMargin={14}
+            label={{ value: 'Value', angle: -90, position: 'insideLeft', textAnchor: 'middle', dx: -19, fontSize: 12 }}
+            tick={{ fontSize: 10 }}
             />
             <Tooltip 
               formatter={(value: number, name: string) => [
@@ -180,17 +180,17 @@ export default function LossChart({ data }: LossChartProps) {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 dataKey="epoch" 
-                label={{ value: 'Epoch', position: 'insideBottom', offset: -10 }}
-                tick={{ fontSize: 12 }}
+                label={{ value: 'Epoch', position: 'insideBottom', offset: -10, fontSize: 12 }}
+                tick={{ fontSize: 10 }}
               />
               <YAxis
               scale="log"
               domain={[yErrorTicks[0], yErrorTicks[yErrorTicks.length - 1]]}
               ticks={yErrorTicks}
               tickFormatter={formatError}
-              tickMargin={12}
-              label={{ value: 'Relative Error (log)', angle: -90, position: 'insideLeft', textAnchor: 'middle', dx: -19 }}
-              tick={{ fontSize: 12 }}
+              tickMargin={14}
+              label={{ value: 'Rel error (log)', angle: -90, position: 'insideLeft', textAnchor: 'start', dx: -19, fontSize: 12 }}
+              tick={{ fontSize: 10 }}
               />
               <Tooltip 
                 formatter={(value: number) => [formatError(value), 'Relative error']}
