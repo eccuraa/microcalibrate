@@ -33,16 +33,6 @@ export default function LossChart({ data }: LossChartProps) {
       rel_error: d.rel_abs_error
     }));
 
-  const yValueTicks = (() => {
-    if (targetData.length === 0) return [];
-    const NUM = 6;
-    const allValues = targetData.flatMap(d => [d.target, d.estimate]);
-    const minValue = Math.min(...allValues);
-    const maxValue = Math.max(...allValues);
-    const step = (maxValue - minValue) / (NUM - 1);
-    return Array.from({ length: NUM }, (_, i) => minValue + i * step);
-  })();
-
   const yErrorTicks = (() => {
     const rels = targetData.map(d => d.rel_error).filter(Boolean);
     if (rels.length === 0) return [];
