@@ -13,7 +13,7 @@ import h5py
 
 chosen_columns = ["household_id/2024", "age/2024", "net_worth/2024", "household_weight/2024"]  # Columns to be used from the dataset
 '''
-📊 Available columns:
+Available columns:
   • aca_take_up_seed/2024
   • age/2024
   • alimony_expense/2024
