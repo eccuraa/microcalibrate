@@ -12,7 +12,6 @@ import { parseCalibrationCSV, getCalibrationMetrics } from '@/utils/csvParser';
 export default function Dashboard() {
   const [data, setData] = useState<CalibrationDataPoint[]>([]);
   const [filename, setFilename] = useState<string>('');
-  const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [error, setError] = useState<string>('');
   const [showDashboard, setShowDashboard] = useState<boolean>(false);
 
@@ -22,9 +21,8 @@ export default function Dashboard() {
       console.log('Parsed data length:', parsedData.length);
       setData(parsedData);
       setFilename(name);
-      setSelectedTargets([]);
       setError('');
-      // Don't automatically show dashboard - let user click the button
+      // Do not automatically show dashboard - let user click the button
     } catch (err) {
       console.error('Error parsing CSV:', err);
       setError(err instanceof Error ? err.message : 'Failed to parse CSV file');
@@ -33,9 +31,6 @@ export default function Dashboard() {
       setShowDashboard(false);
     }
   };
-
-  const metrics = getCalibrationMetrics(data);
-  const targetNames = [...new Set(data.map(d => d.target_name))];
 
   console.log('Current state - showDashboard:', showDashboard, 'data.length:', data.length);
 
@@ -95,7 +90,6 @@ export default function Dashboard() {
                 onClick={() => {
                   setData([]);
                   setFilename('');
-                  setSelectedTargets([]);
                   setError('');
                   setShowDashboard(false);
                 }}

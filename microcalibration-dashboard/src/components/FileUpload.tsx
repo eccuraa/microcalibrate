@@ -265,7 +265,7 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
     <div className="bg-white rounded-lg shadow-lg p-6">
       <div className="mb-6">
         <h2 className="text-2xl font-semibold text-gray-900 mb-2">Load calibration data</h2>
-        <p className="text-gray-600">Choose how you'd like to load your CSV file</p>
+        <p className="text-gray-600">Choose how you would like to load your CSV file</p>
       </div>
 
       {error && (
