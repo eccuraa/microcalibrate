@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Upload, File, Link, Database } from 'lucide-react';
+import { useState } from 'react';
+import { Upload, File as FileIcon, Link, Database } from 'lucide-react';
 
 interface FileUploadProps {
   onFileLoad: (content: string, filename: string) => void;
@@ -16,125 +16,127 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
   const [loadedFile, setLoadedFile] = useState<string>('');
   const [error, setError] = useState<string>('');
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    setError('');
-    
-    const files = Array.from(e.dataTransfer.files);
-    
-    if (files.length === 0) {
-      setError('No files were dropped. Please try again.');
-      return;
-    }
-    
-    if (files.length > 1) {
-      setError('Please drop only one file at a time. Multiple files are not supported.');
-      return;
-    }
-    
-    const file = files[0];
-    
-    if (!file.name.endsWith('.csv')) {
-      setError(`Invalid file type: "${file.name}". Please drop a CSV file (.csv extension required).`);
-      return;
-    }
-    
-    if (file.size === 0) {
-      setError('The dropped file appears to be empty. Please check your file and try again.');
-      return;
-    }
-    
-    if (file.size > 50 * 1024 * 1024) { // 50MB limit
-      setError('File is too large (over 50MB). Please use a smaller CSV file.');
-      return;
-    }
-    
-    processFile(file);
-  }, []);
-
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    setError('');
-    
-    if (!file) {
-      setError('No file was selected. Please try again.');
-      return;
-    }
-    
-    if (!file.name.endsWith('.csv')) {
-      setError(`Invalid file type: "${file.name}". Please select a CSV file (.csv extension required).`);
-      return;
-    }
-    
-    if (file.size === 0) {
-      setError('The selected file appears to be empty. Please check your file and try again.');
-      return;
-    }
-    
-    if (file.size > 50 * 1024 * 1024) { // 50MB limit
-      setError('File is too large (over 50MB). Please select a smaller CSV file.');
-      return;
-    }
-    
-    processFile(file);
-  }, []);
-
-  const processFile = async (file: File) => {
+  async function processFile(file: globalThis.File) {
     setIsLoading(true);
     try {
       const content = await file.text();
-      
+
       // Basic CSV validation
       if (!content.trim()) {
         throw new Error('The file appears to be empty or contains only whitespace.');
       }
-      
+
       // Check for basic CSV structure
       const lines = content.trim().split('\n');
       if (lines.length < 2) {
         throw new Error('The file must contain at least a header row and one data row.');
       }
-      
+
       // Check for required columns
       const headerLine = lines[0].toLowerCase();
       const requiredColumns = ['epoch', 'loss', 'target_name', 'target', 'estimate', 'error'];
       const missingColumns = requiredColumns.filter(col => !headerLine.includes(col));
-      
+
       if (missingColumns.length > 0) {
-        throw new Error(`Missing required columns: ${missingColumns.join(', ')}. Please ensure your CSV has the correct format.`);
+        throw new Error(
+          `Missing required columns: ${missingColumns.join(', ')}. Please ensure your CSV has the correct format.`
+        );
       }
-      
+
       onFileLoad(content, file.name);
       setLoadedFile(file.name);
     } catch (err) {
-      if (err instanceof Error) {
-        setError(`File processing error: ${err.message}`);
-      } else {
-        setError('Failed to read file. Please ensure it is a valid CSV file and try again.');
-      }
+      setError(
+        err instanceof Error
+          ? `File processing error: ${err.message}`
+          : 'Failed to read file. Please ensure it is a valid CSV file and try again.'
+      );
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
-  const handleUrlLoad = async () => {
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragOver(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragOver(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragOver(false);
+    setError('');
+
+    const files = Array.from(e.dataTransfer.files);
+
+    if (files.length === 0) {
+      setError('No files were dropped. Please try again.');
+      return;
+    }
+
+    if (files.length > 1) {
+      setError('Please drop only one file at a time. Multiple files are not supported.');
+      return;
+    }
+
+    const file = files[0];
+
+    if (!file.name.endsWith('.csv')) {
+      setError(`Invalid file type: "${file.name}". Please drop a CSV file (.csv extension required).`);
+      return;
+    }
+
+    if (file.size === 0) {
+      setError('The dropped file appears to be empty. Please check your file and try again.');
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      // 50 MB limit
+      setError('File is too large (over 50 MB). Please use a smaller CSV file.');
+      return;
+    }
+
+    processFile(file);
+  }
+
+  function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    setError('');
+
+    if (!file) {
+      setError('No file was selected. Please try again.');
+      return;
+    }
+
+    if (!file.name.endsWith('.csv')) {
+      setError(`Invalid file type: "${file.name}". Please select a CSV file (.csv extension required).`);
+      return;
+    }
+
+    if (file.size === 0) {
+      setError('The selected file appears to be empty. Please check your file and try again.');
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      setError('File is too large (over 50 MB). Please select a smaller CSV file.');
+      return;
+    }
+
+    processFile(file);
+  }
+
+  async function handleUrlLoad() {
     if (!urlInput.trim()) {
       setError('Please enter a URL to load a CSV file.');
       return;
     }
 
-    // Basic URL validation
     let url: URL;
     try {
       url = new URL(urlInput.trim());
@@ -143,12 +145,11 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
       return;
     }
 
-    // Check if URL looks like it points to a CSV
     if (!url.pathname.toLowerCase().endsWith('.csv') && !urlInput.toLowerCase().includes('csv')) {
       setError('URL should point to a CSV file. Please ensure the URL ends with .csv or contains CSV data.');
+      return;
     }
 
-    // Only allow HTTPS URLs for security
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
       setError('Only HTTP and HTTPS URLs are supported. Please use a web URL.');
       return;
@@ -156,81 +157,71 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
 
     setIsLoading(true);
     setError('');
-    
+
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-      
+      const timeoutId = setTimeout(() => controller.abort(), 30_000); // 30 s timeout
+
       const response = await fetch(urlInput.trim(), {
         signal: controller.signal,
-        headers: {
-          'Accept': 'text/csv, text/plain, */*'
-        }
+        headers: { Accept: 'text/csv, text/plain, */*' }
       });
-      
+
       clearTimeout(timeoutId);
-      
+
       if (!response.ok) {
-        let errorMessage = `HTTP ${response.status}`;
-        switch (response.status) {
-          case 404:
-            errorMessage = 'File not found (404). Please check the URL and try again.';
-            break;
-          case 403:
-            errorMessage = 'Access forbidden (403). The server denied access to this file.';
-            break;
-          case 401:
-            errorMessage = 'Authentication required (401). This file requires login credentials.';
-            break;
-          case 500:
-            errorMessage = 'Server error (500). The remote server encountered an error.';
-            break;
-          case 503:
-            errorMessage = 'Service unavailable (503). The server is temporarily unavailable.';
-            break;
-          default:
-            errorMessage = `HTTP error ${response.status}: ${response.statusText}`;
-        }
-        throw new Error(errorMessage);
+        const status = response.status;
+        const map: Record<number, string> = {
+          404: 'File not found (404). Please check the URL and try again.',
+          403: 'Access forbidden (403). The server denied access to this file.',
+          401: 'Authentication required (401). This file requires login credentials.',
+          500: 'Server error (500). The remote server encountered an error.',
+          503: 'Service unavailable (503). The server is temporarily unavailable.'
+        };
+        throw new Error(map[status] || `HTTP error ${status}: ${response.statusText}`);
       }
 
       const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('text/csv') && !contentType.includes('text/plain') && !contentType.includes('application/csv')) {
+      if (
+        !contentType.includes('text/csv') &&
+        !contentType.includes('text/plain') &&
+        !contentType.includes('application/csv')
+      ) {
         setError(`Warning: Server returned content type "${contentType}". This may not be a CSV file.`);
       }
 
       const content = await response.text();
-      
-      // Basic CSV validation
+
       if (!content.trim()) {
         throw new Error('The downloaded file appears to be empty.');
       }
-      
-      // Check for basic CSV structure
+
       const lines = content.trim().split('\n');
       if (lines.length < 2) {
         throw new Error('The downloaded file must contain at least a header row and one data row.');
       }
-      
-      // Check for required columns
+
       const headerLine = lines[0].toLowerCase();
       const requiredColumns = ['epoch', 'loss', 'target_name', 'target', 'estimate', 'error'];
       const missingColumns = requiredColumns.filter(col => !headerLine.includes(col));
-      
+
       if (missingColumns.length > 0) {
-        throw new Error(`Downloaded file is missing required columns: ${missingColumns.join(', ')}. Please ensure the URL points to a valid calibration CSV file.`);
+        throw new Error(
+          `Downloaded file is missing required columns: ${missingColumns.join(
+            ', '
+          )}. Please ensure the URL points to a valid calibration CSV file.`
+        );
       }
-      
+
       const filename = url.pathname.split('/').pop() || 'remote-file.csv';
       onFileLoad(content, filename);
       setLoadedFile(filename);
-      
     } catch (err) {
       if (err instanceof Error) {
         if (err.name === 'AbortError') {
-          setError('Request timed out after 30 seconds. Please check your internet connection and try again.');
+          setError('Request timed out after 30 s. Please check your connection and try again.');
         } else if (err.message.includes('Failed to fetch')) {
-          setError('Network error: Unable to reach the URL. Please check your internet connection and ensure the URL is accessible.');
+          setError('Network error: Unable to reach the URL. Please check the address and your connection.');
         } else {
           setError(`Failed to load from URL: ${err.message}`);
         }
@@ -240,12 +231,12 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
-  const handleSampleLoad = async () => {
+  async function handleSampleLoad() {
     setIsLoading(true);
     setError('');
-    
+
     try {
       const response = await fetch('/sample.csv');
       if (!response.ok) {
@@ -259,7 +250,7 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
@@ -325,18 +316,12 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-              isDragOver
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-300 hover:border-gray-400'
+              isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
             }`}
           >
-            <File className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-lg font-medium text-gray-900 mb-2">
-              Drop your CSV file here
-            </p>
-            <p className="text-gray-600 mb-4">
-              or click to browse files
-            </p>
+            <FileIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-lg font-medium text-gray-900 mb-2">Drop your CSV file here</p>
+            <p className="text-gray-600 mb-4">or click to browse files</p>
             <input
               type="file"
               accept=".csv"
@@ -365,7 +350,7 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
                 id="url-input"
                 type="url"
                 value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
+                onChange={e => setUrlInput(e.target.value)}
                 placeholder="https://example.com/data.csv"
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -377,9 +362,7 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
                 {isLoading ? 'Loading...' : 'Load'}
               </button>
             </div>
-            <p className="text-sm text-gray-500 mt-2">
-              Enter a direct URL to a CSV file accessible via HTTP/HTTPS
-            </p>
+            <p className="text-sm text-gray-500 mt-2">Enter a direct URL to a CSV file accessible via HTTP/HTTPS</p>
           </div>
         </div>
       )}
@@ -390,9 +373,7 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
             <div className="flex items-start space-x-3">
               <Database className="w-6 h-6 text-blue-600 mt-1" />
               <div className="flex-1">
-                <h3 className="text-lg font-medium text-blue-900 mb-2">
-                  Load sample calibration data
-                </h3>
+                <h3 className="text-lg font-medium text-blue-900 mb-2">Load sample calibration data</h3>
                 <p className="text-blue-700 mb-4">
                   Try the dashboard with sample calibration data showing income targets by age group over 500+ epochs.
                 </p>
@@ -426,9 +407,10 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
         </div>
       )}
 
+      {/* Global loading indicator */}
       {isLoading && (
         <div className="mt-4 text-center">
-          <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
           <p className="text-sm text-gray-600 mt-2">Loading file...</p>
         </div>
       )}

@@ -7,7 +7,7 @@ import LossChart from '@/components/LossChart';
 import ErrorDistribution from '@/components/ErrorDistribution';
 import DataTable from '@/components/DataTable';
 import { CalibrationDataPoint } from '@/types/calibration';
-import { parseCalibrationCSV, getCalibrationMetrics } from '@/utils/csvParser';
+import { parseCalibrationCSV } from '@/utils/csvParser';
 
 export default function Dashboard() {
   const [data, setData] = useState<CalibrationDataPoint[]>([]);
