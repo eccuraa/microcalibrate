@@ -165,7 +165,13 @@ export default function DataTable({ data }: DataTableProps) {
               return (
                 <tr key={i} className="border-b border-gray-200 hover:bg-gray-50">
                   <td className="py-3 px-4 text-gray-900 max-w-64" title={row.target_name}>
-                    <div className="overflow-x-auto whitespace-nowrap scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                    <div 
+                      className="overflow-x-auto whitespace-nowrap [&::-webkit-scrollbar]:hidden" 
+                      style={{ 
+                        scrollbarWidth: 'none', 
+                        msOverflowStyle: 'none',
+                      }}
+                    >
                       {row.target_name}
                     </div>
                   </td>
