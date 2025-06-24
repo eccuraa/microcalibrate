@@ -106,7 +106,7 @@ def test_calibration_harder_targets() -> None:
         learning_rate=0.01,
         dropout_rate=0,
         subsample_every=0,
-        csv_path="./microcalibration-dashboard/public/sample.csv",
+        csv_path="./microcalibration-dashboard/public/calibration_log.csv",
     )
 
     # Call calibrate method on our data and targets of interest
