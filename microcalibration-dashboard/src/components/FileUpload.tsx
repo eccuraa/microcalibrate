@@ -52,6 +52,62 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
   const [selectedArtifact, setSelectedArtifact] = useState('');
   const [isLoadingGithubData, setIsLoadingGithubData] = useState(false);
 
+  function sampleEpochs(csvContent: string, maxEpochs = 20): { content: string; wasSampled: boolean; originalEpochs: number; sampledEpochs: number } {
+    const lines = csvContent.trim().split('\n');
+    const header = lines[0];
+    const dataLines = lines.slice(1);
+    
+    if (dataLines.length === 0) return { content: csvContent, wasSampled: false, originalEpochs: 0, sampledEpochs: 0 };
+    
+    // Parse epoch column index
+    const headerCols = header.toLowerCase().split(',');
+    const epochIndex = headerCols.findIndex(col => col.trim() === 'epoch');
+    
+    if (epochIndex === -1) return { content: csvContent, wasSampled: false, originalEpochs: 0, sampledEpochs: 0 };
+    
+    // Group data by epoch
+    const epochData = new Map<number, string[]>();
+    dataLines.forEach(line => {
+      const cols = line.split(',');
+      const epoch = parseInt(cols[epochIndex]);
+      if (!isNaN(epoch)) {
+        if (!epochData.has(epoch)) {
+          epochData.set(epoch, []);
+        }
+        epochData.get(epoch)!.push(line);
+      }
+    });
+    
+    // Get sorted unique epochs
+    const allEpochs = Array.from(epochData.keys()).sort((a, b) => a - b);
+    const originalEpochCount = allEpochs.length;
+    
+    if (allEpochs.length <= maxEpochs) {
+      return { content: csvContent, wasSampled: false, originalEpochs: originalEpochCount, sampledEpochs: originalEpochCount };
+    }
+    
+    // Sample evenly spaced epochs
+    const sampledEpochs: number[] = [];
+    for (let i = 0; i < maxEpochs; i++) {
+      const index = Math.round((i / (maxEpochs - 1)) * (allEpochs.length - 1));
+      sampledEpochs.push(allEpochs[index]);
+    }
+    
+    // Collect sampled data
+    const sampledLines: string[] = [header];
+    sampledEpochs.forEach(epoch => {
+      const epochLines = epochData.get(epoch) || [];
+      sampledLines.push(...epochLines);
+    });
+    
+    return { 
+      content: sampledLines.join('\n'), 
+      wasSampled: true, 
+      originalEpochs: originalEpochCount, 
+      sampledEpochs: maxEpochs 
+    };
+  }
+
   async function processFile(file: globalThis.File) {
     setIsLoading(true);
     try {
@@ -79,8 +135,15 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
         );
       }
 
-      onFileLoad(content, file.name);
-      setLoadedFile(file.name);
+      // Sample epochs to limit data size
+      const samplingResult = sampleEpochs(content);
+      
+      onFileLoad(samplingResult.content, file.name);
+      if (samplingResult.wasSampled) {
+        setLoadedFile(`${file.name} (sampled ${samplingResult.sampledEpochs}/${samplingResult.originalEpochs} epochs)`);
+      } else {
+        setLoadedFile(file.name);
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -249,9 +312,16 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
         );
       }
 
+      // Sample epochs to limit data size
+      const samplingResult = sampleEpochs(content);
+      
       const filename = url.pathname.split('/').pop() || 'remote-file.csv';
-      onFileLoad(content, filename);
-      setLoadedFile(filename);
+      onFileLoad(samplingResult.content, filename);
+      if (samplingResult.wasSampled) {
+        setLoadedFile(`${filename} (sampled ${samplingResult.sampledEpochs}/${samplingResult.originalEpochs} epochs)`);
+      } else {
+        setLoadedFile(filename);
+      }
     } catch (err) {
       if (err instanceof Error) {
         if (err.name === 'AbortError') {
@@ -279,8 +349,16 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const content = await response.text();
-      onFileLoad(content, 'sample.csv');
-      setLoadedFile('sample.csv');
+      
+      // Sample epochs to limit data size
+      const samplingResult = sampleEpochs(content);
+      
+      onFileLoad(samplingResult.content, 'sample.csv');
+      if (samplingResult.wasSampled) {
+        setLoadedFile(`sample.csv (sampled ${samplingResult.sampledEpochs}/${samplingResult.originalEpochs} epochs)`);
+      } else {
+        setLoadedFile('sample.csv');
+      }
     } catch (err) {
       setError(`Failed to load sample data: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
@@ -534,9 +612,16 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
         throw new Error(`Missing required columns: ${missingColumns.join(', ')}`);
       }
 
+      // Sample epochs to limit data size
+      const samplingResult = sampleEpochs(csvContent);
+
       // Success! Load the CSV into the dashboard
-      const displayName = `${csvFilename} (from ${artifact.name})`;
-      onFileLoad(csvContent, displayName);
+      const baseDisplayName = `${csvFilename} (from ${artifact.name})`;
+      const displayName = samplingResult.wasSampled 
+        ? `${baseDisplayName} - sampled ${samplingResult.sampledEpochs}/${samplingResult.originalEpochs} epochs`
+        : baseDisplayName;
+      
+      onFileLoad(samplingResult.content, displayName);
       setLoadedFile(displayName);
       setError('');
       
