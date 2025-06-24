@@ -1,20 +1,46 @@
 'use client';
 
 import { useState } from 'react';
-import { Upload, File as FileIcon, Link, Database } from 'lucide-react';
+import { Upload, File as FileIcon, Link, Database, Github } from 'lucide-react';
+import JSZip from 'jszip';
 
 interface FileUploadProps {
   onFileLoad: (content: string, filename: string) => void;
   onViewDashboard: () => void;
 }
 
+interface GitHubCommit {
+  sha: string;
+  commit: {
+    message: string;
+    author: {
+      date: string;
+    };
+  };
+}
+
+interface GitHubBranch {
+  name: string;
+  commit: {
+    sha: string;
+  };
+}
+
 export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [urlInput, setUrlInput] = useState('');
-  const [activeTab, setActiveTab] = useState<'drop' | 'url' | 'sample'>('drop');
+  const [activeTab, setActiveTab] = useState<'drop' | 'url' | 'sample' | 'github'>('drop');
   const [loadedFile, setLoadedFile] = useState<string>('');
   const [error, setError] = useState<string>('');
+
+  // GitHub-specific state
+  const [githubRepo, setGithubRepo] = useState('');
+  const [githubBranches, setGithubBranches] = useState<GitHubBranch[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState('');
+  const [githubCommits, setGithubCommits] = useState<GitHubCommit[]>([]);
+  const [selectedCommit, setSelectedCommit] = useState('');
+  const [isLoadingGithubData, setIsLoadingGithubData] = useState(false);
 
   async function processFile(file: globalThis.File) {
     setIsLoading(true);
@@ -252,6 +278,252 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
     }
   }
 
+  async function fetchGithubBranches() {
+    if (!githubRepo.trim()) {
+      setError('Please enter a GitHub repository (e.g., owner/repo)');
+      return;
+    }
+
+    const repoMatch = githubRepo.trim().match(/^([^/]+)\/([^/]+)$/);
+    if (!repoMatch) {
+      setError('Invalid repository format. Use "owner/repo" format (e.g., "PolicyEngine/microcalibrate")');
+      return;
+    }
+
+    setIsLoadingGithubData(true);
+    setError('');
+
+    try {
+      // Note: Using unauthenticated requests for public repo metadata (branches/commits)
+      // This has lower rate limits but works for public repos
+      const response = await fetch(`https://api.github.com/repos/${githubRepo}/branches`);
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Repository not found. Please check the repository name and ensure it is public.');
+        }
+        throw new Error(`Failed to fetch branches: ${response.status} ${response.statusText}`);
+      }
+
+      const branches: GitHubBranch[] = await response.json();
+      setGithubBranches(branches);
+      
+      // Auto-select main/master branch if available
+      const defaultBranch = branches.find(b => b.name === 'main' || b.name === 'master');
+      if (defaultBranch) {
+        setSelectedBranch(defaultBranch.name);
+        await fetchGithubCommits(defaultBranch.name);
+      }
+    } catch (err) {
+      setError(`GitHub API error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setIsLoadingGithubData(false);
+    }
+  }
+
+  async function fetchGithubCommits(branch: string) {
+    if (!githubRepo.trim() || !branch) return;
+
+    setIsLoadingGithubData(true);
+    try {
+      const response = await fetch(`https://api.github.com/repos/${githubRepo}/commits?sha=${branch}&per_page=20`);
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Branch not found or repository is private.');
+        }
+        throw new Error(`Failed to fetch commits: ${response.status} ${response.statusText}`);
+      }
+
+      const commits: GitHubCommit[] = await response.json();
+      setGithubCommits(commits);
+      
+      // Auto-select latest commit
+      if (commits.length > 0) {
+        setSelectedCommit(commits[0].sha);
+      }
+    } catch (err) {
+      setError(`GitHub API error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setIsLoadingGithubData(false);
+    }
+  }
+
+  async function loadGithubArtifact() {
+    if (!githubRepo.trim() || !selectedCommit) {
+      setError('Please select a repository and commit');
+      return;
+    }
+
+    const [owner, repo] = githubRepo.split('/');
+    if (!owner || !repo) {
+      setError('Invalid repository format');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      // Use the GitHub token from environment variable
+      const githubToken = process.env.NEXT_PUBLIC_GITHUB_TOKEN;
+      
+      if (!githubToken) {
+        setError('GitHub token not configured. Please set NEXT_PUBLIC_GITHUB_TOKEN environment variable.');
+        return;
+      }
+      
+      console.log(`Fetching workflow runs for ${owner}/${repo} commit ${selectedCommit}`);
+      
+      // Get workflow runs for the commit
+      const runsResponse = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/actions/runs?head_sha=${selectedCommit}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${githubToken}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'PolicyEngine-Dashboard/1.0'
+          }
+        }
+      );
+
+      if (!runsResponse.ok) {
+        const errorText = await runsResponse.text();
+        console.error(`GitHub API error: ${runsResponse.status} - ${errorText}`);
+        throw new Error(`Failed to fetch workflow runs: ${runsResponse.status} ${runsResponse.statusText}`);
+      }
+
+      const runsData = await runsResponse.json();
+      const runs = runsData.workflow_runs;
+
+      if (!runs || runs.length === 0) {
+        setError('No workflow runs found for this commit. Make sure the commit has been processed by GitHub Actions.');
+        return;
+      }
+
+      // Find a completed run with calibration artifacts
+      for (const run of runs) {
+        if (run.status !== 'completed') continue;
+
+        try {
+          const artifactsResponse = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/actions/runs/${run.id}/artifacts`,
+            {
+              headers: {
+                'Authorization': `Bearer ${githubToken}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'PolicyEngine-Dashboard/1.0'
+              }
+            }
+          );
+
+          if (!artifactsResponse.ok) continue;
+
+          const artifactsData = await artifactsResponse.json();
+          const artifacts = artifactsData.artifacts;
+
+          // Look for calibration CSV artifacts
+          const csvArtifact = artifacts.find((artifact: { name: string }) => 
+            artifact.name.toLowerCase().includes('calibration') && 
+            (artifact.name.toLowerCase().includes('.csv') || artifact.name.toLowerCase().includes('log'))
+          );
+
+          if (csvArtifact) {
+            // Download and extract the CSV from the ZIP artifact
+            try {
+              setError('🔄 Downloading and extracting CSV from artifact...');
+              
+              const downloadResponse = await fetch(csvArtifact.archive_download_url, {
+                headers: {
+                  'Authorization': `Bearer ${githubToken}`,
+                  'Accept': 'application/vnd.github.v3+json',
+                  'User-Agent': 'PolicyEngine-Dashboard/1.0'
+                }
+              });
+
+              if (!downloadResponse.ok) {
+                throw new Error(`Failed to download artifact: ${downloadResponse.status}`);
+              }
+
+              const zipBuffer = await downloadResponse.arrayBuffer();
+              const zip = new JSZip();
+              const zipContent = await zip.loadAsync(zipBuffer);
+
+              // Find CSV files in the ZIP
+              const csvFiles = Object.keys(zipContent.files).filter(filename => 
+                filename.toLowerCase().endsWith('.csv') && !zipContent.files[filename].dir
+              );
+
+              if (csvFiles.length === 0) {
+                throw new Error('No CSV files found in the artifact ZIP');
+              }
+
+              // Use the first CSV file found
+              const csvFilename = csvFiles[0];
+              const csvFile = zipContent.files[csvFilename];
+              const csvContent = await csvFile.async('text');
+
+              // Validate the CSV content
+              if (!csvContent.trim()) {
+                throw new Error('The extracted CSV file is empty');
+              }
+
+              // Check for basic CSV structure
+              const lines = csvContent.trim().split('\n');
+              if (lines.length < 2) {
+                throw new Error('The CSV must contain at least a header row and one data row');
+              }
+
+              // Check for required columns
+              const headerLine = lines[0].toLowerCase();
+              const requiredColumns = ['epoch', 'loss', 'target_name', 'target', 'estimate', 'error'];
+              const missingColumns = requiredColumns.filter(col => !headerLine.includes(col));
+
+              if (missingColumns.length > 0) {
+                throw new Error(`Missing required columns: ${missingColumns.join(', ')}`);
+              }
+
+              // Success! Load the CSV into the dashboard
+              const displayName = `${csvFilename} (from ${csvArtifact.name})`;
+              onFileLoad(csvContent, displayName);
+              setLoadedFile(displayName);
+              setError('');
+              
+              // Clear the GitHub state since we successfully loaded the file
+              setGithubRepo('');
+              setGithubBranches([]);
+              setSelectedBranch('');
+              setGithubCommits([]);
+              setSelectedCommit('');
+              return;
+
+            } catch (extractError) {
+              console.error('CSV extraction error:', extractError);
+              setError(`❌ Failed to extract CSV: ${extractError instanceof Error ? extractError.message : 'Unknown error'}. Try using the URL tab with a direct CSV link.`);
+              return;
+            }
+          }
+        } catch {
+          continue; // Try next run
+        }
+      }
+
+      // If we get here, no artifacts were found
+      setError('No calibration CSV artifacts found in completed workflow runs. Please ensure the commit has run tests that generate calibration logs.');
+
+    } catch (err) {
+      if (err instanceof Error) {
+        if (err.message.includes('Failed to fetch')) {
+          setError('Network error: Unable to reach GitHub API. Please check your internet connection.');
+        } else {
+          setError(`GitHub API error: ${err.message}`);
+        }
+      } else {
+        setError('Unknown error occurred while accessing GitHub.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
       <div className="mb-6">
@@ -294,6 +566,17 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
         >
           <Link className="w-4 h-4 inline mr-2" />
           URL
+        </button>
+        <button
+          onClick={() => setActiveTab('github')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 ${
+            activeTab === 'github'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Github className="w-4 h-4 inline mr-2" />
+          GitHub
         </button>
         <button
           onClick={() => setActiveTab('sample')}
@@ -395,6 +678,141 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
         </div>
       )}
 
+      {activeTab === 'github' && (
+        <div className="space-y-6">
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
+            <div className="flex items-start space-x-3">
+              <Github className="w-6 h-6 text-gray-600 mt-1" />
+              <div className="flex-1">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Load from GitHub repository
+                </h3>
+                <p className="text-gray-700 mb-4">
+                  Load calibration data from GitHub Actions artifacts in public repositories.
+                </p>
+                
+                {/* Repository Input */}
+                <div className="mb-4">
+                  <label htmlFor="github-repo" className="block text-sm font-medium text-gray-700 mb-2">
+                    Repository (owner/repo)
+                  </label>
+                  <div className="flex space-x-2">
+                    <input
+                      id="github-repo"
+                      type="text"
+                      value={githubRepo}
+                      onChange={(e) => setGithubRepo(e.target.value)}
+                      placeholder="PolicyEngine/microcalibrate"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={fetchGithubBranches}
+                      disabled={isLoadingGithubData || !githubRepo.trim()}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {isLoadingGithubData ? 'Loading...' : 'Fetch'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Branch Selection */}
+                {githubBranches.length > 0 && (
+                  <div className="mb-4">
+                    <label htmlFor="github-branch" className="block text-sm font-medium text-gray-700 mb-2">
+                      Branch
+                    </label>
+                    <select
+                      id="github-branch"
+                      value={selectedBranch}
+                      onChange={(e) => {
+                        setSelectedBranch(e.target.value);
+                        fetchGithubCommits(e.target.value);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select a branch</option>
+                      {githubBranches.map((branch) => (
+                        <option key={branch.name} value={branch.name}>
+                          {branch.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Commit Selection */}
+                {githubCommits.length > 0 && (
+                  <div className="mb-4">
+                    <label htmlFor="github-commit" className="block text-sm font-medium text-gray-700 mb-2">
+                      Commit
+                    </label>
+                    <select
+                      id="github-commit"
+                      value={selectedCommit}
+                      onChange={(e) => setSelectedCommit(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select a commit</option>
+                      {githubCommits.map((commit) => (
+                        <option key={commit.sha} value={commit.sha}>
+                          {commit.sha.slice(0, 8)} - {commit.commit.message.slice(0, 60)}
+                          {commit.commit.message.length > 60 ? '...' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedCommit && (
+                      <p className="text-sm text-gray-500 mt-1">
+                        {githubCommits.find(c => c.sha === selectedCommit)?.commit.author.date && 
+                          new Date(githubCommits.find(c => c.sha === selectedCommit)!.commit.author.date).toLocaleString()
+                        }
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Load Button */}
+                {selectedCommit && (
+                  <button
+                    onClick={loadGithubArtifact}
+                    disabled={isLoading}
+                    className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md disabled:opacity-50"
+                  >
+                    {isLoading ? 'Loading Artifact...' : 'Load Calibration Data'}
+                  </button>
+                )}
+
+                <div className="mt-4 text-sm text-gray-600">
+                  <p className="mb-2">📌 <strong>Note:</strong> This feature finds calibration CSV files in GitHub Actions artifacts.</p>
+                  <ul className="space-y-1 text-xs">
+                    <li>• ✅ Works with PolicyEngine public repositories</li>
+                    <li>• ✅ Authenticated access to download artifacts</li>
+                    <li>• ✅ Automatically finds calibration logs from CI/CD runs</li>
+                    <li>• ✅ Full CSV extraction from ZIP artifacts</li>
+                  </ul>
+                  
+                  {process.env.NODE_ENV === 'development' && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const response = await fetch('/api/test');
+                          const data = await response.json();
+                          alert(`API Test: ${JSON.stringify(data, null, 2)}`);
+                        } catch (err) {
+                          alert(`API Test Error: ${err}`);
+                        }
+                      }}
+                      className="mt-2 text-xs bg-gray-200 px-2 py-1 rounded"
+                    >
+                      Test API
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* View Dashboard Button */}
       {loadedFile && (
         <div className="mt-6 pt-6 border-t border-gray-200">
@@ -408,10 +826,12 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
       )}
 
       {/* Global loading indicator */}
-      {isLoading && (
+      {(isLoading || isLoadingGithubData) && (
         <div className="mt-4 text-center">
           <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-          <p className="text-sm text-gray-600 mt-2">Loading file...</p>
+          <p className="text-sm text-gray-600 mt-2">
+            {isLoadingGithubData ? 'Loading GitHub data...' : 'Loading file...'}
+          </p>
         </div>
       )}
     </div>

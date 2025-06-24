@@ -1,17 +1,22 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app) that provides a visualization dashboard to explore performance throughout the calibration process.
+# Microcalibration dashboard
+
+This is a [Next.js](https://nextjs.org) project that provides a visualization dashboard to explore performance throughout the calibration process.
+
+## Features
+
+- 📊 **Sample data**: Pre-loaded calibration data for immediate testing
+- 📁 **File upload**: Drag & drop CSV file support with comprehensive validation
+- 🌐 **URL loading**: Load CSV files from remote URLs with error handling
+- 🔗 **GitHub integration**: Load calibration data directly from GitHub Actions artifacts
+- 📈 **Interactive visualizations**: Charts and metrics powered by Recharts
+- 📱 **Responsive design**: Works on desktop and mobile devices
 
 ## Getting started
 
 First, run the development server:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+make dashboard-dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
