@@ -61,7 +61,7 @@ export default function DataTable({ data }: DataTableProps) {
   if (data.length === 0) {
     return (
       <div className="bg-white border border-gray-300 p-6 rounded-lg shadow-sm">
-        <h2 className="text-xl font-bold text-gray-800">Detailed Results</h2>
+        <h2 className="text-xl font-bold text-gray-800">Detailed results</h2>
         <p className="text-gray-600 mt-4">No data available</p>
       </div>
     );
@@ -164,8 +164,16 @@ export default function DataTable({ data }: DataTableProps) {
                                 row.rel_abs_error < 0.20 ? 'text-yellow-600' : 'text-red-600';
               return (
                 <tr key={i} className="border-b border-gray-200 hover:bg-gray-50">
-                  <td className="py-3 px-4 text-gray-900 max-w-64 truncate" title={row.target_name}>
-                    {row.target_name}
+                  <td className="py-3 px-4 text-gray-900 max-w-64" title={row.target_name}>
+                    <div 
+                      className="overflow-x-auto whitespace-nowrap [&::-webkit-scrollbar]:hidden" 
+                      style={{ 
+                        scrollbarWidth: 'none', 
+                        msOverflowStyle: 'none',
+                      }}
+                    >
+                      {row.target_name}
+                    </div>
                   </td>
                   <td className="py-3 px-4 text-right text-gray-700 font-mono text-sm">
                     {formatValue(row.target)}
