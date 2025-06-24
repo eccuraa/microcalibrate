@@ -6,8 +6,6 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true
   },
-  basePath: process.env.NODE_ENV === 'production' ? '/microcalibrate' : '',
-  assetPrefix: process.env.NODE_ENV === 'production' ? '/microcalibrate/' : '',
 };
 
 export default nextConfig;
