@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Upload, File as FileIcon, Link, Database, Github } from 'lucide-react';
+import { Upload, File as FileIcon, Link, Database, GitBranch } from 'lucide-react';
 import JSZip from 'jszip';
 
 interface FileUploadProps {
@@ -26,6 +26,14 @@ interface GitHubBranch {
   };
 }
 
+interface GitHubArtifact {
+  id: number;
+  name: string;
+  archive_download_url: string;
+  size_in_bytes: number;
+  created_at: string;
+}
+
 export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,6 +48,8 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
   const [selectedBranch, setSelectedBranch] = useState('');
   const [githubCommits, setGithubCommits] = useState<GitHubCommit[]>([]);
   const [selectedCommit, setSelectedCommit] = useState('');
+  const [availableArtifacts, setAvailableArtifacts] = useState<GitHubArtifact[]>([]);
+  const [selectedArtifact, setSelectedArtifact] = useState('');
   const [isLoadingGithubData, setIsLoadingGithubData] = useState(false);
 
   async function processFile(file: globalThis.File) {
@@ -336,9 +346,10 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
       const commits: GitHubCommit[] = await response.json();
       setGithubCommits(commits);
       
-      // Auto-select latest commit
+      // Auto-select latest commit and fetch its artifacts
       if (commits.length > 0) {
         setSelectedCommit(commits[0].sha);
+        await fetchGithubArtifacts(commits[0].sha);
       }
     } catch (err) {
       setError(`GitHub API error: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -347,35 +358,25 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
     }
   }
 
-  async function loadGithubArtifact() {
-    if (!githubRepo.trim() || !selectedCommit) {
-      setError('Please select a repository and commit');
+  async function fetchGithubArtifacts(commitSha: string) {
+    if (!githubRepo.trim() || !commitSha) return;
+
+    const githubToken = process.env.NEXT_PUBLIC_GITHUB_TOKEN;
+    if (!githubToken) {
+      setError('GitHub token not configured. Please set NEXT_PUBLIC_GITHUB_TOKEN environment variable.');
       return;
     }
 
-    const [owner, repo] = githubRepo.split('/');
-    if (!owner || !repo) {
-      setError('Invalid repository format');
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
+    setIsLoadingGithubData(true);
+    setAvailableArtifacts([]);
+    setSelectedArtifact('');
 
     try {
-      // Use the GitHub token from environment variable
-      const githubToken = process.env.NEXT_PUBLIC_GITHUB_TOKEN;
-      
-      if (!githubToken) {
-        setError('GitHub token not configured. Please set NEXT_PUBLIC_GITHUB_TOKEN environment variable.');
-        return;
-      }
-      
-      console.log(`Fetching workflow runs for ${owner}/${repo} commit ${selectedCommit}`);
+      const [owner, repo] = githubRepo.split('/');
       
       // Get workflow runs for the commit
       const runsResponse = await fetch(
-        `https://api.github.com/repos/${owner}/${repo}/actions/runs?head_sha=${selectedCommit}`,
+        `https://api.github.com/repos/${owner}/${repo}/actions/runs?head_sha=${commitSha}`,
         {
           headers: {
             'Authorization': `Bearer ${githubToken}`,
@@ -386,20 +387,20 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
       );
 
       if (!runsResponse.ok) {
-        const errorText = await runsResponse.text();
-        console.error(`GitHub API error: ${runsResponse.status} - ${errorText}`);
-        throw new Error(`Failed to fetch workflow runs: ${runsResponse.status} ${runsResponse.statusText}`);
+        throw new Error(`Failed to fetch workflow runs: ${runsResponse.status}`);
       }
 
       const runsData = await runsResponse.json();
       const runs = runsData.workflow_runs;
 
       if (!runs || runs.length === 0) {
-        setError('No workflow runs found for this commit. Make sure the commit has been processed by GitHub Actions.');
+        setError('No workflow runs found for this commit.');
         return;
       }
 
-      // Find a completed run with calibration artifacts
+      // Collect all calibration artifacts from completed runs
+      const allArtifacts: GitHubArtifact[] = [];
+      
       for (const run of runs) {
         if (run.status !== 'completed') continue;
 
@@ -420,105 +421,137 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
           const artifactsData = await artifactsResponse.json();
           const artifacts = artifactsData.artifacts;
 
-          // Look for calibration CSV artifacts
-          const csvArtifact = artifacts.find((artifact: { name: string }) => 
-            artifact.name.toLowerCase().includes('calibration') && 
-            (artifact.name.toLowerCase().includes('.csv') || artifact.name.toLowerCase().includes('log'))
+          // Filter for calibration artifacts
+          const calibrationArtifacts = artifacts.filter((artifact: GitHubArtifact) => 
+            artifact.name.toLowerCase().includes('calibration') || 
+            artifact.name.toLowerCase().includes('log') ||
+            artifact.name.toLowerCase().includes('.csv')
           );
 
-          if (csvArtifact) {
-            // Download and extract the CSV from the ZIP artifact
-            try {
-              setError('🔄 Downloading and extracting CSV from artifact...');
-              
-              const downloadResponse = await fetch(csvArtifact.archive_download_url, {
-                headers: {
-                  'Authorization': `Bearer ${githubToken}`,
-                  'Accept': 'application/vnd.github.v3+json',
-                  'User-Agent': 'PolicyEngine-Dashboard/1.0'
-                }
-              });
-
-              if (!downloadResponse.ok) {
-                throw new Error(`Failed to download artifact: ${downloadResponse.status}`);
-              }
-
-              const zipBuffer = await downloadResponse.arrayBuffer();
-              const zip = new JSZip();
-              const zipContent = await zip.loadAsync(zipBuffer);
-
-              // Find CSV files in the ZIP
-              const csvFiles = Object.keys(zipContent.files).filter(filename => 
-                filename.toLowerCase().endsWith('.csv') && !zipContent.files[filename].dir
-              );
-
-              if (csvFiles.length === 0) {
-                throw new Error('No CSV files found in the artifact ZIP');
-              }
-
-              // Use the first CSV file found
-              const csvFilename = csvFiles[0];
-              const csvFile = zipContent.files[csvFilename];
-              const csvContent = await csvFile.async('text');
-
-              // Validate the CSV content
-              if (!csvContent.trim()) {
-                throw new Error('The extracted CSV file is empty');
-              }
-
-              // Check for basic CSV structure
-              const lines = csvContent.trim().split('\n');
-              if (lines.length < 2) {
-                throw new Error('The CSV must contain at least a header row and one data row');
-              }
-
-              // Check for required columns
-              const headerLine = lines[0].toLowerCase();
-              const requiredColumns = ['epoch', 'loss', 'target_name', 'target', 'estimate', 'error'];
-              const missingColumns = requiredColumns.filter(col => !headerLine.includes(col));
-
-              if (missingColumns.length > 0) {
-                throw new Error(`Missing required columns: ${missingColumns.join(', ')}`);
-              }
-
-              // Success! Load the CSV into the dashboard
-              const displayName = `${csvFilename} (from ${csvArtifact.name})`;
-              onFileLoad(csvContent, displayName);
-              setLoadedFile(displayName);
-              setError('');
-              
-              // Clear the GitHub state since we successfully loaded the file
-              setGithubRepo('');
-              setGithubBranches([]);
-              setSelectedBranch('');
-              setGithubCommits([]);
-              setSelectedCommit('');
-              return;
-
-            } catch (extractError) {
-              console.error('CSV extraction error:', extractError);
-              setError(`❌ Failed to extract CSV: ${extractError instanceof Error ? extractError.message : 'Unknown error'}. Try using the URL tab with a direct CSV link.`);
-              return;
-            }
-          }
+          allArtifacts.push(...calibrationArtifacts);
         } catch {
-          continue; // Try next run
+          continue;
         }
       }
 
-      // If we get here, no artifacts were found
-      setError('No calibration CSV artifacts found in completed workflow runs. Please ensure the commit has run tests that generate calibration logs.');
+      if (allArtifacts.length === 0) {
+        setError('No calibration artifacts found for this commit.');
+        return;
+      }
+
+      // Remove duplicates and sort by creation date (newest first)
+      const uniqueArtifacts = allArtifacts
+        .filter((artifact, index, self) => 
+          index === self.findIndex(a => a.name === artifact.name)
+        )
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      setAvailableArtifacts(uniqueArtifacts);
+      
+      // Auto-select the first artifact
+      if (uniqueArtifacts.length > 0) {
+        setSelectedArtifact(uniqueArtifacts[0].id.toString());
+      }
 
     } catch (err) {
-      if (err instanceof Error) {
-        if (err.message.includes('Failed to fetch')) {
-          setError('Network error: Unable to reach GitHub API. Please check your internet connection.');
-        } else {
-          setError(`GitHub API error: ${err.message}`);
+      setError(`Failed to fetch artifacts: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setIsLoadingGithubData(false);
+    }
+  }
+
+  async function loadGithubArtifact() {
+    if (!selectedArtifact) {
+      setError('Please select an artifact to load');
+      return;
+    }
+
+    const artifact = availableArtifacts.find(a => a.id.toString() === selectedArtifact);
+    if (!artifact) {
+      setError('Selected artifact not found');
+      return;
+    }
+
+    const githubToken = process.env.NEXT_PUBLIC_GITHUB_TOKEN;
+    if (!githubToken) {
+      setError('GitHub token not configured. Please set NEXT_PUBLIC_GITHUB_TOKEN environment variable.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      setError('🔄 Downloading and extracting CSV from artifact...');
+      
+      const downloadResponse = await fetch(artifact.archive_download_url, {
+        headers: {
+          'Authorization': `Bearer ${githubToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'PolicyEngine-Dashboard/1.0'
         }
-      } else {
-        setError('Unknown error occurred while accessing GitHub.');
+      });
+
+      if (!downloadResponse.ok) {
+        throw new Error(`Failed to download artifact: ${downloadResponse.status}`);
       }
+
+      const zipBuffer = await downloadResponse.arrayBuffer();
+      const zip = new JSZip();
+      const zipContent = await zip.loadAsync(zipBuffer);
+
+      // Find CSV files in the ZIP
+      const csvFiles = Object.keys(zipContent.files).filter(filename => 
+        filename.toLowerCase().endsWith('.csv') && !zipContent.files[filename].dir
+      );
+
+      if (csvFiles.length === 0) {
+        throw new Error('No CSV files found in the artifact ZIP');
+      }
+
+      // Use the first CSV file found
+      const csvFilename = csvFiles[0];
+      const csvFile = zipContent.files[csvFilename];
+      const csvContent = await csvFile.async('text');
+
+      // Validate the CSV content
+      if (!csvContent.trim()) {
+        throw new Error('The extracted CSV file is empty');
+      }
+
+      // Check for basic CSV structure
+      const lines = csvContent.trim().split('\n');
+      if (lines.length < 2) {
+        throw new Error('The CSV must contain at least a header row and one data row');
+      }
+
+      // Check for required columns
+      const headerLine = lines[0].toLowerCase();
+      const requiredColumns = ['epoch', 'loss', 'target_name', 'target', 'estimate', 'error'];
+      const missingColumns = requiredColumns.filter(col => !headerLine.includes(col));
+
+      if (missingColumns.length > 0) {
+        throw new Error(`Missing required columns: ${missingColumns.join(', ')}`);
+      }
+
+      // Success! Load the CSV into the dashboard
+      const displayName = `${csvFilename} (from ${artifact.name})`;
+      onFileLoad(csvContent, displayName);
+      setLoadedFile(displayName);
+      setError('');
+      
+      // Clear the GitHub state since we successfully loaded the file
+      setGithubRepo('');
+      setGithubBranches([]);
+      setSelectedBranch('');
+      setGithubCommits([]);
+      setSelectedCommit('');
+      setAvailableArtifacts([]);
+      setSelectedArtifact('');
+
+    } catch (extractError) {
+      console.error('CSV extraction error:', extractError);
+      setError(`❌ Failed to extract CSV: ${extractError instanceof Error ? extractError.message : 'Unknown error'}. Try using the URL tab with a direct CSV link.`);
     } finally {
       setIsLoading(false);
     }
@@ -575,7 +608,7 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
-          <Github className="w-4 h-4 inline mr-2" />
+          <GitBranch className="w-4 h-4 inline mr-2" />
           GitHub
         </button>
         <button
@@ -682,7 +715,7 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
         <div className="space-y-6">
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
             <div className="flex items-start space-x-3">
-              <Github className="w-6 h-6 text-gray-600 mt-1" />
+              <GitBranch className="w-6 h-6 text-gray-600 mt-1" />
               <div className="flex-1">
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
                   Load from GitHub repository
@@ -749,7 +782,10 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
                     <select
                       id="github-commit"
                       value={selectedCommit}
-                      onChange={(e) => setSelectedCommit(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedCommit(e.target.value);
+                        fetchGithubArtifacts(e.target.value);
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">Select a commit</option>
@@ -770,8 +806,37 @@ export default function FileUpload({ onFileLoad, onViewDashboard }: FileUploadPr
                   </div>
                 )}
 
+                {/* Artifact Selection */}
+                {availableArtifacts.length > 0 && (
+                  <div className="mb-4">
+                    <label htmlFor="github-artifact" className="block text-sm font-medium text-gray-700 mb-2">
+                      Artifact ({availableArtifacts.length} available)
+                    </label>
+                    <select
+                      id="github-artifact"
+                      value={selectedArtifact}
+                      onChange={(e) => setSelectedArtifact(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select an artifact</option>
+                      {availableArtifacts.map((artifact) => (
+                        <option key={artifact.id} value={artifact.id.toString()}>
+                          {artifact.name} ({(artifact.size_in_bytes / 1024).toFixed(1)} KB)
+                        </option>
+                      ))}
+                    </select>
+                    {selectedArtifact && (
+                      <p className="text-sm text-gray-500 mt-1">
+                        {availableArtifacts.find(a => a.id.toString() === selectedArtifact)?.created_at && 
+                          `Created: ${new Date(availableArtifacts.find(a => a.id.toString() === selectedArtifact)!.created_at).toLocaleString()}`
+                        }
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Load Button */}
-                {selectedCommit && (
+                {selectedArtifact && (
                   <button
                     onClick={loadGithubArtifact}
                     disabled={isLoading}
