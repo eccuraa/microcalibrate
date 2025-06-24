@@ -34,3 +34,27 @@ changelog:
 	bump-version changelog.yaml pyproject.toml
 	rm changelog_entry.yaml || true
 	touch changelog_entry.yaml
+
+dashboard-install:
+	cd microcalibration-dashboard && npm install
+
+dashboard-dev:
+	cd microcalibration-dashboard && npm run dev
+
+dashboard-build:
+	cd microcalibration-dashboard && npm run build
+
+dashboard-start:
+	cd microcalibration-dashboard && npm start
+
+dashboard-clean:
+	cd microcalibration-dashboard && rm -rf .next node_modules
+
+dashboard-static:
+	cd microcalibration-dashboard && npm run static
+
+dashboard-preview:
+	cd microcalibration-dashboard && npm run static && npx serve out
+
+dashboard-check:
+	cd microcalibration-dashboard && npm run lint && npm run static && echo "✅ Dashboard ready for GitHub Pages deployment"

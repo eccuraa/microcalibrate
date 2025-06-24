@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Optional
 
 import numpy as np
@@ -190,6 +191,8 @@ def reweight(
     )
 
     if csv_path:
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
         performance_df.to_csv(csv_path, index=True)
 
     logger.info(f"Reweighting completed. Final sample size: {len(weights)}")
