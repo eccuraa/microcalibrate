@@ -41,6 +41,12 @@ jobs:
           uv pip install -e ".[dev]" --system
       - name: Run tests with coverage
         run: make test
+      - name: Upload calibration log
+        if: always() # even if tests fail, to inspect the file
+        uses: actions/upload-artifact@v4
+        with:
+          name: calibration-log-${{ github.sha }}
+          path: microcalibration-dashboard/public/calibration_log.csv
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
